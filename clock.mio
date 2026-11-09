@@ -1,0 +1,6 @@
+yobu "kiso/os";
+
+// Return monotonic time in milliseconds.
+koukai waza now_ms() -> int64 {
+    kaesu os.monotonic_ms();
+}

@@ -1,0 +1,143 @@
+
+yobu "kiso/array";
+yobu "kiso/math";
+
+// Sort a copy without modifying the input.
+waza sorted_duration_copy(values: []int64) -> []int64 {
+    kaku sorted = array.clone(values);
+    kaku i: int64 = 1;
+
+    aida (i < len(sorted)) {
+        kaku current = sorted[i];
+        kaku j = i;
+
+        aida (j > 0) {
+            moshi (sorted[j - 1] <= current) {
+                nukeru;
+            }
+
+            sorted[j] = sorted[j - 1];
+            j = j - 1;
+        }
+
+        sorted[j] = current;
+        i = i + 1;
+    }
+
+    kaesu sorted;
+}
+
+// Keep the legacy integer-median API.
+waza median_duration_ms(values: []int64) -> int64 {
+    moshi (len(values) == 0) {
+        kaesu 0;
+    }
+
+    kaku sorted = sorted_duration_copy(values);
+    kaesu sorted[len(sorted) / 2];
+}
+
+// Median supporting odd and even sample counts.
+waza median_duration_ms_exact(values: []int64) -> float64 {
+    kaku count = len(values);
+
+    moshi (count == 0) {
+        kaesu 0.0;
+    }
+
+    kaku sorted = sorted_duration_copy(values);
+    kaku middle = count / 2;
+
+    moshi (count - middle * 2 == 1) {
+        kaesu float64(sorted[middle]);
+    }
+
+    kaesu (
+        float64(sorted[middle - 1])
+        + float64(sorted[middle])
+    ) / 2.0;
+}
+
+// Population statistics for benchmark samples.
+koukai kata Stability {
+    sample_count: int64;
+    mean_ns_per_iter: float64;
+    variance_ns2: float64;
+    stddev_ns_per_iter: float64;
+    cv_percent: float64;
+    error: string;
+}
+
+waza stability_error(message: string) -> Stability {
+    kaesu Stability {
+        sample_count: 0,
+        mean_ns_per_iter: 0.0,
+        variance_ns2: 0.0,
+        stddev_ns_per_iter: 0.0,
+        cv_percent: 0.0,
+        error: message
+    };
+}
+
+// Analyze a set of batch durations.
+//
+// Variance uses the population definition,
+// dividing by N rather than N - 1.
+//
+// variance_ns2 is expressed in (ns/iter)^2.
+koukai waza analyze(
+    samples_ms: []int64,
+    iterations: int64
+) -> Stability {
+
+    kaku count = len(samples_ms);
+
+    moshi (count == 0) {
+        kaesu stability_error("empty samples");
+    }
+
+    moshi (iterations <= 0) {
+        kaesu stability_error("invalid iterations");
+    }
+
+    kaku total_ms: float64 = 0.0;
+    kaku i: int64 = 0;
+
+    aida (i < count) {
+        moshi (samples_ms[i] <= 0) {
+            kaesu stability_error("invalid sample duration");
+        }
+
+        total_ms = total_ms + float64(samples_ms[i]);
+        i = i + 1;
+    }
+
+    kaku mean_ms = total_ms / float64(count);
+
+    // Sum of squared deviations.
+    kaku squared_sum: float64 = 0.0;
+    i = 0;
+
+    aida (i < count) {
+        kaku delta = float64(samples_ms[i]) - mean_ms;
+
+        squared_sum = squared_sum + delta * delta;
+        i = i + 1;
+    }
+
+    kaku variance_ms2 =
+        squared_sum / float64(count);
+
+    kaku stddev_ms = math.sqrt(variance_ms2);
+
+    kaku scale = 1000000.0 / float64(iterations);
+
+    kaesu Stability {
+        sample_count: count,
+        mean_ns_per_iter: mean_ms * scale,
+        variance_ns2: variance_ms2 * scale * scale,
+        stddev_ns_per_iter: stddev_ms * scale,
+        cv_percent: stddev_ms / mean_ms * 100.0,
+        error: ""
+    };
+}

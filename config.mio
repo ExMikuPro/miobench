@@ -1,0 +1,16 @@
+koukai kata Config {
+    initial_iterations: int64;
+    samples: int64;
+    target_ms: int64;
+    warmup_ms: int64;
+}
+
+// Default benchmark configuration.
+koukai waza defaults() -> Config {
+    kaesu Config {
+        initial_iterations: 1000000,
+        samples: 7,
+        target_ms: 300,
+        warmup_ms: 300
+    };
+}

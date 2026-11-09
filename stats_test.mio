@@ -1,0 +1,116 @@
+yobu "kiso/testing";
+
+// Helper workload for validation tests.
+waza dummy_work(iterations: int64) -> int64 {
+    kaesu iterations;
+}
+
+// Test 1: Real benchmark samples from M4 Pro.
+waza test_real_benchmark_samples() -> unit {
+    kaku samples: []int64 = [
+        433, 407, 406, 409, 430, 419, 421
+    ];
+
+    kaku median = median_duration_ms(samples);
+
+    testing.expect(
+        median == 419,
+        "M4 Pro sample median must be 419 ms"
+    );
+
+    testing.expect(
+        samples[0] == 433 && samples[1] == 407,
+        "median must preserve original samples"
+    );
+}
+
+// Test 2: Duplicated values.
+waza test_median_with_duplicates() -> unit {
+    kaku samples: []int64 = [9, 1, 9, 3, 5, 3, 7];
+
+    testing.expect(
+        median_duration_ms(samples) == 5,
+        "median must handle duplicates"
+    );
+}
+
+// Test 3: Single sample.
+waza test_single_sample() -> unit {
+    kaku samples: []int64 = [42];
+
+    testing.expect(
+        median_duration_ms(samples) == 42,
+        "single sample median"
+    );
+}
+
+// Test 4: Nanosecond conversion.
+waza test_ns_per_iteration_conversion() -> unit {
+    kaku result = duration_ns_per_iter(500, 1000000);
+
+    testing.expect(
+        result == 500.0,
+        "500 ms / 1 million iterations = 500 ns"
+    );
+}
+
+// Test 5: Invalid iteration count.
+waza test_invalid_iterations() -> unit {
+    kaku result = measure("invalid", dummy_work, 0);
+
+    testing.expect(
+        result.error != "",
+        "zero iterations must be rejected"
+    );
+}
+
+// Test 6: Even sample median.
+waza test_even_sample_median() -> unit {
+    kaku samples: []int64 = [406, 407, 419, 421];
+
+    testing.expect(
+        median_duration_ms_exact(samples) == 413.0,
+        "even sample median must be 413 ms"
+    );
+}
+
+// Test 7: Default configuration.
+waza test_default_config() -> unit {
+    kaku config = defaults();
+
+    testing.expect(
+        config.samples == 7,
+        "default sample count"
+    );
+
+    testing.expect(
+        config.target_ms == 300,
+        "default target duration"
+    );
+
+    testing.expect(
+        config.warmup_ms == 300,
+        "default warmup duration"
+    );
+}
+
+// Test 8: Invalid configuration.
+waza test_invalid_config() -> unit {
+    kaku config = Config {
+        initial_iterations: 1000000,
+        samples: 0,
+        target_ms: 300,
+        warmup_ms: 300
+    };
+
+    kaku result = measure_with_config(
+        "invalid",
+        dummy_work,
+        config
+    );
+
+    testing.expect(
+        result.error != "",
+        "invalid sample count must be rejected"
+    );
+}

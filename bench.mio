@@ -1,0 +1,226 @@
+yobu "kiso/array";
+
+koukai kata Result {
+    name: string;
+    iterations: int64;
+    elapsed_ms: int64;
+    median_ms: float64;
+    ns_per_op: float64;
+    checksum: int64;
+    error: string;
+
+    samples_ms: []int64;
+    min_ns_per_op: float64;
+    mean_ns_per_op: float64;
+    max_ns_per_op: float64;
+}
+
+waza failed(
+    name: string,
+    iterations: int64,
+    message: string
+) -> Result {
+    kaesu Result {
+        name: name,
+        iterations: iterations,
+        elapsed_ms: 0,
+        median_ms: 0.0,
+        ns_per_op: 0.0,
+        checksum: 0,
+        error: message,
+
+        samples_ms: [],
+        min_ns_per_op: 0.0,
+        mean_ns_per_op: 0.0,
+        max_ns_per_op: 0.0
+    };
+}
+
+waza duration_ns_per_iter(
+    duration_ms: int64,
+    iterations: int64
+) -> float64 {
+    kaesu float64(duration_ms) * 1000000.0
+        / float64(iterations);
+}
+
+// Configurable benchmark runner.
+koukai waza measure_with_config(
+    name: string,
+    workload: (int64) -> int64,
+    config: Config
+) -> Result {
+
+    // Validate configuration.
+    moshi (config.samples < 1 || config.samples > 31) {
+        kaesu failed(name, 0, "samples must be 1..31");
+    }
+
+    moshi (config.target_ms < 1 || config.target_ms > 10000) {
+        kaesu failed(name, 0, "invalid target_ms");
+    }
+
+    moshi (config.warmup_ms < 0 || config.warmup_ms > 10000) {
+        kaesu failed(name, 0, "invalid warmup_ms");
+    }
+
+    moshi (
+        config.initial_iterations < 1 ||
+        config.initial_iterations > 1000000000
+    ) {
+        kaesu failed(name, 0, "invalid initial_iterations");
+    }
+
+    kaku iterations = config.initial_iterations;
+    kaku checksum: int64 = 0;
+
+    // Phase 1: automatic calibration.
+    kaku attempts: int64 = 0;
+    kaku warmup_elapsed: int64 = 0;
+
+    aida (hai) {
+        kaku started = now_ms();
+
+        checksum = workload(iterations);
+
+        kaku elapsed = now_ms() - started;
+
+        moshi (elapsed < 0) {
+            kaesu failed(name, iterations, "clock error");
+        }
+
+        warmup_elapsed = warmup_elapsed + elapsed;
+
+        moshi (elapsed >= config.target_ms) {
+            nukeru;
+        }
+
+        moshi (
+            attempts >= 30 ||
+            iterations > 500000000
+        ) {
+            kaesu failed(
+                name,
+                iterations,
+                "unable to calibrate benchmark"
+            );
+        }
+
+        iterations = iterations * 2;
+        attempts = attempts + 1;
+    }
+
+    // Phase 2: complete the requested warmup.
+    aida (warmup_elapsed < config.warmup_ms) {
+        kaku started = now_ms();
+
+        checksum = workload(iterations);
+
+        kaku elapsed = now_ms() - started;
+
+        moshi (elapsed <= 0) {
+            kaesu failed(name, iterations, "warmup clock error");
+        }
+
+        warmup_elapsed = warmup_elapsed + elapsed;
+    }
+
+    // Phase 3: measured samples.
+    kaku samples =
+        array.with_capacity[int64](config.samples);
+
+    kaku min_ms: int64 = 9223372036854775807;
+    kaku max_ms: int64 = 0;
+    kaku total_ms: int64 = 0;
+
+    kaku sample_index: int64 = 0;
+
+    aida (sample_index < config.samples) {
+        kaku started = now_ms();
+
+        checksum = workload(iterations);
+
+        kaku elapsed = now_ms() - started;
+
+        moshi (elapsed <= 0) {
+            kaesu failed(
+                name,
+                iterations,
+                "invalid sample duration"
+            );
+        }
+
+        array.push(samples, elapsed);
+
+        moshi (elapsed < min_ms) {
+            min_ms = elapsed;
+        }
+
+        moshi (elapsed > max_ms) {
+            max_ms = elapsed;
+        }
+
+        total_ms = total_ms + elapsed;
+        sample_index = sample_index + 1;
+    }
+
+    // Phase 4: calculate statistics.
+    kaku median_exact =
+        median_duration_ms_exact(samples);
+
+    kaku median_ns =
+        median_exact * 1000000.0
+        / float64(iterations);
+
+    kaku min_ns =
+        duration_ns_per_iter(min_ms, iterations);
+
+    kaku max_ns =
+        duration_ns_per_iter(max_ms, iterations);
+
+    kaku mean_ns =
+        float64(total_ms) * 1000000.0
+        / (
+            float64(iterations)
+            * float64(config.samples)
+        );
+
+    kaesu Result {
+        name: name,
+        iterations: iterations,
+        elapsed_ms: median_duration_ms(samples),
+        median_ms: median_exact,
+        ns_per_op: median_ns,
+        checksum: checksum,
+        error: "",
+
+        samples_ms: samples,
+        min_ns_per_op: min_ns,
+        mean_ns_per_op: mean_ns,
+        max_ns_per_op: max_ns
+    };
+}
+
+// Backward-compatible API.
+
+koukai waza measure(
+    name: string,
+    workload: (int64) -> int64,
+    initial_iterations: int64
+) -> Result {
+    kaku base = defaults();
+
+    kaku config = Config {
+        initial_iterations: initial_iterations,
+        samples: base.samples,
+        target_ms: base.target_ms,
+        warmup_ms: base.warmup_ms
+    };
+
+    kaesu measure_with_config(
+        name,
+        workload,
+        config
+    );
+}
+

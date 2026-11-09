@@ -1,0 +1,226 @@
+yobu "kiso/string";
+yobu "kiso/convert";
+yobu "kiso/encoding/json";
+
+// Append one labeled text line.
+waza report_line(
+    output: string.StringBuilder,
+    label: string,
+    value: string
+) -> unit {
+    string.write_string(output, label);
+    string.write_string(output, value);
+    string.write_string(output, "\n");
+}
+
+// Human-readable benchmark report.
+koukai waza format_text(result: Result) -> string {
+    moshi (result.error != "") {
+        kaesu string.concat("MioBench error: ", result.error);
+    }
+
+    kaku stats = analyze(
+        result.samples_ms,
+        result.iterations
+    );
+
+    moshi (stats.error != "") {
+        kaesu string.concat("MioBench error: ", stats.error);
+    }
+
+    kaku output = string.new_builder();
+
+    report_line(output, "Name: ", result.name);
+
+    report_line(
+        output,
+        "Iterations/sample: ",
+        convert.format_int(result.iterations)
+    );
+
+    report_line(
+        output,
+        "Median ns/iter: ",
+        convert.format_float64(result.ns_per_op)
+    );
+
+    report_line(
+        output,
+        "Min ns/iter: ",
+        convert.format_float64(result.min_ns_per_op)
+    );
+
+    report_line(
+        output,
+        "Mean ns/iter: ",
+        convert.format_float64(result.mean_ns_per_op)
+    );
+
+    report_line(
+        output,
+        "Max ns/iter: ",
+        convert.format_float64(result.max_ns_per_op)
+    );
+
+    report_line(
+        output,
+        "StdDev ns/iter: ",
+        convert.format_float64(stats.stddev_ns_per_iter)
+    );
+
+    report_line(
+        output,
+        "CV (%): ",
+        convert.format_float64(stats.cv_percent)
+    );
+
+    string.write_string(output, "Samples (ms): ");
+
+    kaku i: int64 = 0;
+
+    aida (i < len(result.samples_ms)) {
+        moshi (i > 0) {
+            string.write_string(output, ", ");
+        }
+
+        string.write_string(
+            output,
+            convert.format_int(result.samples_ms[i])
+        );
+
+        i = i + 1;
+    }
+
+    string.write_string(output, "\n");
+
+    report_line(
+        output,
+        "Checksum: ",
+        convert.format_int(result.checksum)
+    );
+
+    kaesu string.builder_string(output);
+}
+
+// Machine-readable JSON report.
+koukai waza to_json(result: Result) -> string {
+    kaku output = string.new_builder();
+
+    moshi (result.error != "") {
+        string.write_string(
+            output,
+            "{\"schema_version\":1,\"error\":"
+        );
+        string.write_string(output, json.quote(result.error));
+        string.write_string(output, "}");
+        kaesu string.builder_string(output);
+    }
+
+    kaku stats = analyze(
+        result.samples_ms,
+        result.iterations
+    );
+
+    moshi (stats.error != "") {
+        string.write_string(
+            output,
+            "{\"schema_version\":1,\"error\":"
+        );
+        string.write_string(output, json.quote(stats.error));
+        string.write_string(output, "}");
+        kaesu string.builder_string(output);
+    }
+
+    string.write_string(
+        output,
+        "{\"schema_version\":1,\"name\":"
+    );
+    string.write_string(output, json.quote(result.name));
+
+    string.write_string(output, ",\"iterations_per_sample\":");
+    string.write_string(
+        output,
+        convert.format_int(result.iterations)
+    );
+
+    string.write_string(output, ",\"sample_count\":");
+    string.write_string(
+        output,
+        convert.format_int(stats.sample_count)
+    );
+
+    string.write_string(output, ",\"median_ms\":");
+    string.write_string(
+        output,
+        convert.format_float64(result.median_ms)
+    );
+
+    string.write_string(output, ",\"median_ns_per_iter\":");
+    string.write_string(
+        output,
+        convert.format_float64(result.ns_per_op)
+    );
+
+    string.write_string(output, ",\"min_ns_per_iter\":");
+    string.write_string(
+        output,
+        convert.format_float64(result.min_ns_per_op)
+    );
+
+    string.write_string(output, ",\"mean_ns_per_iter\":");
+    string.write_string(
+        output,
+        convert.format_float64(stats.mean_ns_per_iter)
+    );
+
+    string.write_string(output, ",\"max_ns_per_iter\":");
+    string.write_string(
+        output,
+        convert.format_float64(result.max_ns_per_op)
+    );
+
+    string.write_string(output, ",\"variance_ns2\":");
+    string.write_string(
+        output,
+        convert.format_float64(stats.variance_ns2)
+    );
+
+    string.write_string(output, ",\"stddev_ns_per_iter\":");
+    string.write_string(
+        output,
+        convert.format_float64(stats.stddev_ns_per_iter)
+    );
+
+    string.write_string(output, ",\"cv_percent\":");
+    string.write_string(
+        output,
+        convert.format_float64(stats.cv_percent)
+    );
+
+    string.write_string(output, ",\"checksum\":");
+    string.write_string(
+        output,
+        convert.format_int(result.checksum)
+    );
+
+    string.write_string(output, ",\"samples_ms\":[");
+
+    kaku i: int64 = 0;
+
+    aida (i < len(result.samples_ms)) {
+        moshi (i > 0) {
+            string.write_string(output, ",");
+        }
+
+        string.write_string(
+            output,
+            convert.format_int(result.samples_ms[i])
+        );
+
+        i = i + 1;
+    }
+
+    string.write_string(output, "]}");
+
+    kaesu string.builder_string(output);
+}

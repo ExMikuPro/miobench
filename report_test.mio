@@ -1,0 +1,93 @@
+yobu "kiso/testing";
+yobu "kiso/encoding/json";
+yobu "kiso/string";
+
+// Test the recorded M4 Pro samples.
+waza test_stability_real_samples() -> unit {
+    kaku samples: []int64 = [
+        819, 814, 815, 813, 814,
+        815, 813, 815, 813, 813
+    ];
+
+    kaku stats = analyze(samples, 120000000);
+
+    testing.expect(
+        stats.error == "",
+        "stability analysis must succeed"
+    );
+
+    testing.expect(
+        stats.cv_percent > 0.214 &&
+        stats.cv_percent < 0.215,
+        "M4 Pro coefficient of variation"
+    );
+
+    testing.expect(
+        stats.stddev_ns_per_iter > 0.0145 &&
+        stats.stddev_ns_per_iter < 0.0146,
+        "M4 Pro standard deviation"
+    );
+}
+
+// Identical samples must have zero variance.
+waza test_stability_zero_variance() -> unit {
+    kaku samples: []int64 = [100, 100, 100];
+
+    kaku stats = analyze(samples, 1000000);
+
+    testing.expect(
+        stats.error == "",
+        "constant samples must be valid"
+    );
+
+    testing.expect(
+        stats.variance_ns2 == 0.0,
+        "constant samples have zero variance"
+    );
+
+    testing.expect(
+        stats.cv_percent == 0.0,
+        "constant samples have zero CV"
+    );
+}
+
+// Serialize and parse JSON with an escaped name.
+waza test_json_roundtrip() -> unit {
+    kaku result = Result {
+        name: "Mio \"test\"",
+        iterations: 1000000,
+        elapsed_ms: 200,
+        median_ms: 200.0,
+        ns_per_op: 200.0,
+        checksum: 42,
+        error: "",
+
+        samples_ms: [100, 200, 300],
+        min_ns_per_op: 100.0,
+        mean_ns_per_op: 200.0,
+        max_ns_per_op: 300.0
+    };
+
+    kaku encoded = to_json(result);
+    kaku document = json.parse(string.to_bytes(encoded));
+
+    testing.expect(
+        document.error == "",
+        "report must produce valid JSON"
+    );
+
+    moshi (document.error == "") {
+        kaku name_node =
+            json.member(document, document.root, "name");
+
+        testing.expect(
+            json.text(document, name_node) == "Mio \"test\"",
+            "JSON must preserve escaped names"
+        );
+    }
+
+    testing.expect(
+        string.contains(format_text(result), "CV (%)"),
+        "text report must include stability metrics"
+    );
+}
